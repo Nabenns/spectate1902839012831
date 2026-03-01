@@ -54,12 +54,12 @@ def side_from_order_type(order_type_value) -> str:
     return "BUY" if "BUY" in order_type else "SELL"
 
 
-def side_emoji(side: str) -> str:
-    if side == "BUY":
-        return "🟢"
-    if side == "SELL":
-        return "🔴"
-    return "⚪"
+def type_emoji(type_label: str) -> str:
+    if type_label.upper() == "LIMIT":
+        return "🕒"
+    if type_label.upper() == "NOW":
+        return "📈"
+    return "ℹ️"
 
 
 def deal_action_label(deal_type, deal_entry) -> str:
@@ -91,18 +91,19 @@ def build_simple_message(
 ) -> str:
     sl_suffix = " (edited ✏️)" if sl_edited else ""
     tp_suffix = " (edited ✏️)" if tp_edited else ""
+    t_emoji = type_emoji(type_label)
     return (
         f"{headline}\n"
-        f"🧭 TYPE : {type_label}\n\n"
-        f"💰 PRICE : {to_float(price)}\n"
-        f"🛑 SL : {to_float(sl)}{sl_suffix}\n"
-        f"🎯 TP : {to_float(tp)}{tp_suffix}"
+        f"{t_emoji} TYPE : {type_label}\n\n"
+        f"PRICE : {to_float(price)}\n"
+        f"❌ SL : {to_float(sl)}{sl_suffix}\n"
+        f"✅ TP : {to_float(tp)}{tp_suffix}"
     )
 
 
 def order_message(order, type_label: str, sl_edited: bool = False, tp_edited: bool = False) -> str:
     side = side_from_order_type(order.type)
-    headline = f"{side_emoji(side)} {side} - {order.symbol}"
+    headline = f"{side} - {order.symbol}"
     return build_simple_message(
         headline=headline,
         type_label=type_label,
@@ -116,7 +117,7 @@ def order_message(order, type_label: str, sl_edited: bool = False, tp_edited: bo
 
 def order_message_from_cache(cached_order: Dict[str, object], type_label: str) -> str:
     side = side_from_order_type(cached_order.get("type"))
-    headline = f"{side_emoji(side)} {side} - {cached_order.get('symbol', '-')}"
+    headline = f"{side} - {cached_order.get('symbol', '-')}"
     return build_simple_message(
         headline=headline,
         type_label=type_label,
@@ -128,7 +129,7 @@ def order_message_from_cache(cached_order: Dict[str, object], type_label: str) -
 
 def position_message(position, type_label: str, sl_edited: bool = False, tp_edited: bool = False) -> str:
     side = "BUY" if position.type == mt5.POSITION_TYPE_BUY else "SELL"
-    headline = f"{side_emoji(side)} {side} - {position.symbol}"
+    headline = f"{side} - {position.symbol}"
     return build_simple_message(
         headline=headline,
         type_label=type_label,
@@ -143,13 +144,10 @@ def position_message(position, type_label: str, sl_edited: bool = False, tp_edit
 def deal_message(deal) -> str:
     symbol = str(getattr(deal, "symbol", "-"))
     action = deal_action_label(getattr(deal, "type", -1), getattr(deal, "entry", -1))
-    if action.startswith("OPENED"):
-        action_emoji = "🚀"
-    elif action.startswith("CLOSED"):
-        action_emoji = "✅"
+    if action.startswith("CLOSED"):
+        headline = f"❌ {action} - {symbol}"
     else:
-        action_emoji = "ℹ️"
-    headline = f"{action_emoji} {action} - {symbol}"
+        headline = f"{action} - {symbol}"
     return build_simple_message(
         headline=headline,
         type_label="NOW",
