@@ -161,8 +161,7 @@ def deal_message(deal) -> str:
         exit_label, exit_emoji = deal_exit_label_and_emoji(deal)
         return (
             f"{exit_emoji} {exit_label} - {symbol}\n"
-            f"📈 TYPE : NOW\n\n"
-            f"PRICE : {to_float(getattr(deal, 'price', 0.0))}"
+            f"\nPRICE : {to_float(getattr(deal, 'price', 0.0))}"
         )
     else:
         headline = f"{action} - {symbol}"
