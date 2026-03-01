@@ -53,6 +53,24 @@ DEAL_TYPE_LABEL = {
 }
 
 
+def deal_action_label(deal_type, deal_entry) -> str:
+    if deal_entry == mt5.DEAL_ENTRY_IN:
+        if deal_type == mt5.DEAL_TYPE_BUY:
+            return "Open BUY"
+        if deal_type == mt5.DEAL_TYPE_SELL:
+            return "Open SELL"
+    if deal_entry == mt5.DEAL_ENTRY_OUT:
+        if deal_type == mt5.DEAL_TYPE_SELL:
+            return "Close BUY"
+        if deal_type == mt5.DEAL_TYPE_BUY:
+            return "Close SELL"
+    if deal_entry == mt5.DEAL_ENTRY_INOUT:
+        return "Reverse Position"
+    if deal_entry == mt5.DEAL_ENTRY_OUT_BY:
+        return "Close By"
+    return "Other"
+
+
 def env(name: str, default: Optional[str] = None) -> Optional[str]:
     value = os.getenv(name, default)
     if value is None:
@@ -168,11 +186,12 @@ def deal_fields(deal, account_info) -> List[Dict[str, str]]:
     deal_sl = getattr(deal, "sl", None)
     deal_tp = getattr(deal, "tp", None)
     deal_profit = getattr(deal, "profit", 0.0)
+    action = deal_action_label(deal_type, deal_entry)
 
     fields = [
         {"name": "Symbol", "value": str(deal_symbol), "inline": True},
-        {"name": "Type", "value": DEAL_TYPE_LABEL.get(deal_type, str(deal_type)), "inline": True},
-        {"name": "Entry", "value": DEAL_ENTRY_LABEL.get(deal_entry, str(deal_entry)), "inline": True},
+        {"name": "Action", "value": action, "inline": True},
+        {"name": "Raw", "value": f"{DEAL_TYPE_LABEL.get(deal_type, str(deal_type))} / {DEAL_ENTRY_LABEL.get(deal_entry, str(deal_entry))}", "inline": True},
         {"name": "Deal Ticket", "value": str(deal_ticket), "inline": True},
         {"name": "Lot", "value": to_float(deal_volume, 2), "inline": True},
         {"name": "Price", "value": to_float(deal_price, 5), "inline": True},
