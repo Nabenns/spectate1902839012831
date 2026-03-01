@@ -252,13 +252,13 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
     safe_post(
         webhook_url,
         "MT5 Monitor Online",
-        f"MONITOR - ONLINE\nTYPE : NOW\n\nPRICE : -\nSL : -\nTP : -",
+        "MONITOR ONLINE",
     )
     if terminal_info is not None and not terminal_info.trade_allowed:
         safe_post(
             webhook_url,
             "MT5 AutoTrading Check",
-            "AUTOTRADING - CHECK\nTYPE : NOW\n\nPRICE : -\nSL : -\nTP : -",
+            "AUTOTRADING CHECK: OFF",
         )
 
     print("[INFO] Monitor is running. Press Ctrl+C to stop.")
@@ -284,7 +284,6 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
 
         created_orders = order_tickets - seen_order_tickets
         removed_orders = seen_order_tickets - order_tickets
-        opened_positions = position_tickets - seen_position_tickets
         fresh_deals = deal_tickets - seen_deal_tickets
         common_orders = order_tickets & seen_order_tickets
         common_positions = position_tickets & seen_position_tickets
@@ -325,14 +324,6 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
                 webhook_url,
                 title,
                 order_message_from_cache(cached_order, "LIMIT"),
-            )
-
-        for ticket in sorted(opened_positions):
-            position = position_map[ticket]
-            safe_post(
-                webhook_url,
-                "New MT5 Position",
-                position_message(position, "NOW"),
             )
 
         for ticket in sorted(common_positions):
