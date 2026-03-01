@@ -101,7 +101,7 @@ def init_mt5(login: Optional[int], password: Optional[str], server: Optional[str
         raise RuntimeError(f"MT5 initialize failed: {code} {message}")
 
 
-def line_value(value: Optional[float], digits: int = 5) -> str:
+def line_value(value: Optional[float], digits: int = 3) -> str:
     if value in (None, 0, 0.0):
         return "-"
     return to_float(value, digits)
