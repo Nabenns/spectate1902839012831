@@ -188,6 +188,7 @@ def position_update_message(position, sl_edited: bool = False, tp_edited: bool =
 def deal_message(
     deal,
     mode_label: str = "NOW",
+    filled_from_limit: bool = False,
     fallback_sl: Optional[float] = None,
     fallback_tp: Optional[float] = None,
 ) -> str:
@@ -197,7 +198,10 @@ def deal_message(
         exit_label, exit_emoji = deal_exit_label_and_emoji(deal)
         return f"{exit_emoji} {exit_label} - {symbol}"
     side = "BUY" if "BUY" in action else "SELL"
-    headline = f"📈 {side} {mode_label} - {symbol}"
+    if filled_from_limit:
+        headline = f"📈 {side} LIMIT FILLED - {symbol}"
+    else:
+        headline = f"📈 {side} {mode_label} - {symbol}"
     deal_sl = getattr(deal, "sl", 0.0)
     deal_tp = getattr(deal, "tp", 0.0)
     if deal_sl in (None, 0, 0.0) and fallback_sl not in (None, 0, 0.0):
@@ -494,13 +498,15 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
             is_open = action.startswith("OPENED")
             is_close = action.startswith("CLOSED")
             filled_ctx = filled_order_context.get(order_ticket, {})
-            mode_label = "LIMIT" if (is_open and order_ticket in filled_order_context) else "NOW"
+            filled_from_limit = bool(is_open and order_ticket in filled_order_context)
+            mode_label = "LIMIT" if filled_from_limit else "NOW"
             msg_id = await send_message(
                 channel,
                 "New MT5 Deal",
                 deal_message(
                     deal,
                     mode_label=mode_label,
+                    filled_from_limit=filled_from_limit,
                     fallback_sl=filled_ctx.get("sl"),
                     fallback_tp=filled_ctx.get("tp"),
                 ),
