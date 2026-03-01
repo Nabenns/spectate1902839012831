@@ -159,16 +159,26 @@ def position_fields(position, account_info) -> List[Dict[str, str]]:
 
 
 def deal_fields(deal, account_info) -> List[Dict[str, str]]:
+    deal_symbol = getattr(deal, "symbol", "-")
+    deal_type = getattr(deal, "type", "-")
+    deal_entry = getattr(deal, "entry", "-")
+    deal_ticket = getattr(deal, "ticket", "-")
+    deal_volume = getattr(deal, "volume", 0.0)
+    deal_price = getattr(deal, "price", 0.0)
+    deal_sl = getattr(deal, "sl", None)
+    deal_tp = getattr(deal, "tp", None)
+    deal_profit = getattr(deal, "profit", 0.0)
+
     fields = [
-        {"name": "Symbol", "value": str(deal.symbol), "inline": True},
-        {"name": "Type", "value": DEAL_TYPE_LABEL.get(deal.type, str(deal.type)), "inline": True},
-        {"name": "Entry", "value": DEAL_ENTRY_LABEL.get(deal.entry, str(deal.entry)), "inline": True},
-        {"name": "Deal Ticket", "value": str(deal.ticket), "inline": True},
-        {"name": "Lot", "value": to_float(deal.volume, 2), "inline": True},
-        {"name": "Price", "value": to_float(deal.price, 5), "inline": True},
-        {"name": "SL", "value": to_float(deal.sl, 5), "inline": True},
-        {"name": "TP", "value": to_float(deal.tp, 5), "inline": True},
-        {"name": "Profit", "value": to_float(deal.profit, 2), "inline": True},
+        {"name": "Symbol", "value": str(deal_symbol), "inline": True},
+        {"name": "Type", "value": DEAL_TYPE_LABEL.get(deal_type, str(deal_type)), "inline": True},
+        {"name": "Entry", "value": DEAL_ENTRY_LABEL.get(deal_entry, str(deal_entry)), "inline": True},
+        {"name": "Deal Ticket", "value": str(deal_ticket), "inline": True},
+        {"name": "Lot", "value": to_float(deal_volume, 2), "inline": True},
+        {"name": "Price", "value": to_float(deal_price, 5), "inline": True},
+        {"name": "SL", "value": to_float(deal_sl, 5), "inline": True},
+        {"name": "TP", "value": to_float(deal_tp, 5), "inline": True},
+        {"name": "Profit", "value": to_float(deal_profit, 2), "inline": True},
     ]
     fields.extend(account_fields(account_info))
     return fields
