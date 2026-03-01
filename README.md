@@ -12,7 +12,17 @@ Notifikasi berisi detail seperti pair/symbol, lot, SL, TP, price, profit, plus d
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
+```
+
+### Windows quick setup
+
+```bat
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+copy .env.example .env
 ```
 
 ## 2) Konfigurasi
@@ -43,5 +53,7 @@ python monitor_mt5_discord.py --interval 2 --history-seed-hours 48
 ## Catatan
 
 - Terminal MT5 harus terpasang dan bisa diakses dari mesin ini.
+- Jika `MT5_TERMINAL_PATH` diisi, MT5 biasanya akan terbuka otomatis saat script start.
 - Jika login sudah aktif di terminal, biasanya kredensial di `.env` bisa dikosongkan.
 - Script ini polling per beberapa detik, bukan event listener native.
+- Status tombol AutoTrading/Algo Trading di MT5 tidak bisa dipaksa ON dari Python API (security restriction), jadi nyalakan dari terminal MT5 sebelum monitor dijalankan.

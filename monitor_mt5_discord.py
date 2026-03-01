@@ -194,6 +194,7 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
     account_info = mt5.account_info()
     if account_info is None:
         raise RuntimeError(f"Could not fetch account info. MT5 error: {mt5.last_error()}")
+    terminal_info = mt5.terminal_info()
 
     current_orders = mt5.orders_get() or []
     current_positions = mt5.positions_get() or []
@@ -210,6 +211,17 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
         f"Watching account `{account_info.login}` on `{account_info.server}` every {interval_sec}s.",
         account_fields(account_info),
     )
+    if terminal_info is not None and not terminal_info.trade_allowed:
+        safe_post(
+            webhook_url,
+            "MT5 Trading Not Allowed",
+            "Terminal connected, but trading/algo may be disabled. Please enable AutoTrading in MT5 terminal.",
+            [
+                {"name": "Connected", "value": str(terminal_info.connected), "inline": True},
+                {"name": "Trade Allowed", "value": str(terminal_info.trade_allowed), "inline": True},
+                {"name": "Community Account", "value": str(terminal_info.community_account), "inline": True},
+            ],
+        )
 
     print("[INFO] Monitor is running. Press Ctrl+C to stop.")
     while True:
