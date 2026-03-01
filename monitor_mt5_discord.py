@@ -86,10 +86,10 @@ def deal_exit_label_and_emoji(deal) -> Tuple[str, str]:
     deal_reason_tp = getattr(mt5, "DEAL_REASON_TP", None)
 
     if deal_reason_sl is not None and reason == deal_reason_sl:
-        return "STOP LOSS", "❌"
+        return "STOPLOSS", "❌"
     if deal_reason_tp is not None and reason == deal_reason_tp:
-        return "TP", "✅"
-    return "CLOSE POSISI", "📉"
+        return "TAKE PROFIT", "✅"
+    return "CLOSE POSISI", "❌"
 
 
 def build_simple_message(
