@@ -154,7 +154,12 @@ def position_message(position, type_label: str, sl_edited: bool = False, tp_edit
     )
 
 
-def deal_message(deal) -> str:
+def deal_message(
+    deal,
+    type_label: str = "NOW",
+    fallback_sl: Optional[float] = None,
+    fallback_tp: Optional[float] = None,
+) -> str:
     symbol = str(getattr(deal, "symbol", "-"))
     action = deal_action_label(getattr(deal, "type", -1), getattr(deal, "entry", -1))
     if action.startswith("CLOSED"):
@@ -163,14 +168,19 @@ def deal_message(deal) -> str:
             f"{exit_emoji} {exit_label} - {symbol}\n"
             f"\nPRICE : {to_float(getattr(deal, 'price', 0.0))}"
         )
-    else:
-        headline = f"{action} - {symbol}"
+    headline = f"{action} - {symbol}"
+    deal_sl = getattr(deal, "sl", 0.0)
+    deal_tp = getattr(deal, "tp", 0.0)
+    if deal_sl in (None, 0, 0.0) and fallback_sl not in (None, 0, 0.0):
+        deal_sl = fallback_sl
+    if deal_tp in (None, 0, 0.0) and fallback_tp not in (None, 0, 0.0):
+        deal_tp = fallback_tp
     return build_simple_message(
         headline=headline,
-        type_label="NOW",
+        type_label=type_label,
         price=getattr(deal, "price", 0.0),
-        sl=getattr(deal, "sl", 0.0),
-        tp=getattr(deal, "tp", 0.0),
+        sl=deal_sl,
+        tp=deal_tp,
     )
 
 
@@ -365,6 +375,7 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
         common_orders = order_tickets & seen_order_tickets
         common_positions = position_tickets & seen_position_tickets
         deal_order_tickets = {int(getattr(d, "order", 0) or 0) for d in new_deals}
+        filled_order_context: Dict[int, Dict[str, float]] = {}
 
         for ticket in sorted(created_orders):
             order = order_map[ticket]
@@ -404,6 +415,11 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
                 continue
             key = f"order:{ticket}"
             is_filled = ticket in deal_order_tickets
+            if is_filled:
+                filled_order_context[ticket] = {
+                    "sl": float(cached_order.get("sl", 0.0) or 0.0),
+                    "tp": float(cached_order.get("tp", 0.0) or 0.0),
+                }
             title = "Pending Order Filled/Closed" if is_filled else "Pending Order Canceled"
             content = order_message_from_cache(cached_order, "LIMIT") if is_filled else canceled_limit_message_from_cache(cached_order)
             await send_message(
@@ -445,15 +461,23 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
         for ticket in sorted(fresh_deals):
             deal = deal_map[ticket]
             position_id = int(getattr(deal, "position_id", 0) or 0)
+            order_ticket = int(getattr(deal, "order", 0) or 0)
             action = deal_action_label(getattr(deal, "type", -1), getattr(deal, "entry", -1))
             key = f"pos:{position_id}" if position_id else None
             is_open = action.startswith("OPENED")
             is_close = action.startswith("CLOSED")
+            filled_ctx = filled_order_context.get(order_ticket, {})
+            event_type_label = "LIMIT" if (is_open and order_ticket in filled_order_context) else "NOW"
 
             msg_id = await send_message(
                 channel,
                 "New MT5 Deal",
-                deal_message(deal),
+                deal_message(
+                    deal,
+                    type_label=event_type_label,
+                    fallback_sl=filled_ctx.get("sl"),
+                    fallback_tp=filled_ctx.get("tp"),
+                ),
                 root_message_by_key,
                 key=key,
                 reply=bool(key and not is_open),
