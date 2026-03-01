@@ -228,6 +228,50 @@ async def send_message(
         return None
 
 
+async def upsert_single_reply(
+    channel: discord.abc.Messageable,
+    title: str,
+    content: str,
+    root_message_by_key: Dict[str, int],
+    update_message_by_key: Dict[str, int],
+    key: str,
+) -> Optional[int]:
+    try:
+        # If we already have one reply message for this key, edit it.
+        if key in update_message_by_key and hasattr(channel, "fetch_message"):
+            try:
+                update_msg = await channel.fetch_message(update_message_by_key[key])  # type: ignore[attr-defined]
+                await update_msg.edit(content=content)
+                print(f"[OK] Discord edited reply: {title}")
+                return int(update_msg.id)
+            except Exception:
+                update_message_by_key.pop(key, None)
+
+        kwargs = {}
+        if key in root_message_by_key and hasattr(channel, "fetch_message"):
+            try:
+                root_msg = await channel.fetch_message(root_message_by_key[key])  # type: ignore[attr-defined]
+                kwargs["reference"] = root_msg
+                kwargs["mention_author"] = False
+            except Exception:
+                pass
+
+        message = await channel.send(content, **kwargs)
+        update_message_by_key[key] = int(message.id)
+        print(f"[OK] Discord sent single reply: {title}")
+        return int(message.id)
+    except Exception as exc:
+        print(f"[WARN] Failed to send/edit single reply ({title}): {exc}")
+        return None
+
+
+def position_key_from_position(position) -> str:
+    identifier = int(getattr(position, "identifier", 0) or 0)
+    if identifier:
+        return f"pos:{identifier}"
+    return f"pos:{int(position.ticket)}"
+
+
 async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, history_seed_hours: int) -> None:
     account_info = mt5.account_info()
     if account_info is None:
@@ -247,6 +291,7 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
     seen_deal_tickets = tickets(existing_deals)
 
     root_message_by_key: Dict[str, int] = {}
+    update_message_by_key: Dict[str, int] = {}
 
     await send_message(channel, "MT5 Monitor Online", "MONITOR ONLINE", root_message_by_key)
     if terminal_info is not None and not terminal_info.trade_allowed:
@@ -297,13 +342,13 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
             sl_edited = "sl" in updates
             tp_edited = "tp" in updates
             key = f"order:{ticket}"
-            await send_message(
+            await upsert_single_reply(
                 channel,
                 "Pending Order Updated",
                 order_message(order, "LIMIT", sl_edited=sl_edited, tp_edited=tp_edited),
                 root_message_by_key,
-                key=key,
-                reply=True,
+                update_message_by_key,
+                key,
             )
 
         for ticket in sorted(removed_orders):
@@ -321,6 +366,7 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
                 reply=True,
             )
             root_message_by_key.pop(key, None)
+            update_message_by_key.pop(key, None)
 
         for ticket in sorted(common_positions):
             position = position_map[ticket]
@@ -331,14 +377,14 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
                 continue
             sl_edited = "sl" in updates
             tp_edited = "tp" in updates
-            key = f"pos:{ticket}"
-            await send_message(
+            key = position_key_from_position(position)
+            await upsert_single_reply(
                 channel,
                 "Position Protection Updated",
                 position_message(position, "NOW", sl_edited=sl_edited, tp_edited=tp_edited),
                 root_message_by_key,
-                key=key,
-                reply=True,
+                update_message_by_key,
+                key,
             )
 
         for ticket in sorted(fresh_deals):
@@ -362,6 +408,7 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
                 root_message_by_key[key] = msg_id
             if key and is_close:
                 root_message_by_key.pop(key, None)
+                update_message_by_key.pop(key, None)
 
         seen_order_tickets = order_tickets
         seen_position_tickets = position_tickets
