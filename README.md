@@ -1,14 +1,18 @@
-# MT5 to Discord Monitor (Python)
+# MT5 to Discord Bot Monitor (Python)
 
-Script ini memantau aktivitas akun MetaTrader 5 dan otomatis kirim notifikasi ke Discord webhook saat:
+Script ini memantau aktivitas akun MetaTrader 5 dan mengirim pesan lewat Discord Bot saat:
 - ada order baru
 - ada update order pending (harga/SL/TP/lot berubah)
 - ada pending order dicancel/terhapus
-- ada posisi baru
 - ada update SL/TP pada posisi terbuka
 - ada deal/eksekusi baru
 
-Notifikasi berisi detail seperti pair/symbol, lot, SL, TP, price, profit, plus data akun (balance/equity/margin).
+Format pesan dibuat simple:
+- `BUY/SELL - PAIR`
+- `TYPE : LIMIT/NOW`
+- `PRICE / SL / TP`
+
+Untuk event update (`edited`), bot akan kirim sebagai **reply** ke pesan utama ticket/position yang sama.
 
 ## 1) Install
 
@@ -35,11 +39,19 @@ cp .env.example .env
 ```
 
 Isi minimal:
-- `DISCORD_WEBHOOK_URL`
+- `DISCORD_BOT_TOKEN`
+- `DISCORD_CHANNEL_ID`
 
 Opsional:
 - `MT5_LOGIN`, `MT5_PASSWORD`, `MT5_SERVER`
 - `MT5_TERMINAL_PATH` (kalau mau target terminal MT5 tertentu)
+
+### Permission bot Discord
+
+Pastikan bot punya permission:
+- `View Channels`
+- `Send Messages`
+- `Read Message History` (dibutuhkan supaya bisa reply ke message sebelumnya)
 
 ## 3) Jalankan
 
