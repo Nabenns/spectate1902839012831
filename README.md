@@ -50,7 +50,7 @@ python monitor_mt5_discord.py
 Opsi:
 
 ```bash
-python monitor_mt5_discord.py --interval 2 --history-seed-hours 48
+python monitor_mt5_discord.py --interval 2 --history-seed-hours 48 --sltp-update-cooldown 15
 ```
 
 ## Catatan
@@ -60,3 +60,4 @@ python monitor_mt5_discord.py --interval 2 --history-seed-hours 48
 - Jika login sudah aktif di terminal, biasanya kredensial di `.env` bisa dikosongkan.
 - Script ini polling per beberapa detik, bukan event listener native.
 - Status tombol AutoTrading/Algo Trading di MT5 tidak bisa dipaksa ON dari Python API (security restriction), jadi nyalakan dari terminal MT5 sebelum monitor dijalankan.
+- `SLTP_UPDATE_COOLDOWN_SEC` dipakai untuk meredam spam notifikasi saat SL/TP sering digeser.

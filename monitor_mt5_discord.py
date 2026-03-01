@@ -27,13 +27,6 @@ ORDER_TYPE_LABEL = {
     mt5.ORDER_TYPE_CLOSE_BY: "CLOSE_BY",
 }
 
-DEAL_ENTRY_LABEL = {
-    mt5.DEAL_ENTRY_IN: "IN",
-    mt5.DEAL_ENTRY_OUT: "OUT",
-    mt5.DEAL_ENTRY_INOUT: "INOUT",
-    mt5.DEAL_ENTRY_OUT_BY: "OUT_BY",
-}
-
 DEAL_TYPE_LABEL = {
     mt5.DEAL_TYPE_BUY: "BUY",
     mt5.DEAL_TYPE_SELL: "SELL",
@@ -56,19 +49,26 @@ DEAL_TYPE_LABEL = {
 def deal_action_label(deal_type, deal_entry) -> str:
     if deal_entry == mt5.DEAL_ENTRY_IN:
         if deal_type == mt5.DEAL_TYPE_BUY:
-            return "Open BUY"
+            return "Opened BUY"
         if deal_type == mt5.DEAL_TYPE_SELL:
-            return "Open SELL"
+            return "Opened SELL"
     if deal_entry == mt5.DEAL_ENTRY_OUT:
         if deal_type == mt5.DEAL_TYPE_SELL:
-            return "Close BUY"
+            return "Closed BUY"
         if deal_type == mt5.DEAL_TYPE_BUY:
-            return "Close SELL"
+            return "Closed SELL"
     if deal_entry == mt5.DEAL_ENTRY_INOUT:
-        return "Reverse Position"
+        return "Reversed Position"
     if deal_entry == mt5.DEAL_ENTRY_OUT_BY:
-        return "Close By"
+        return "Closed By"
     return "Other"
+
+
+def deal_result_label(profit_value) -> str:
+    try:
+        return "WIN" if float(profit_value) > 0 else "LOSS"
+    except Exception:
+        return "LOSS"
 
 
 def env(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -187,11 +187,12 @@ def deal_fields(deal, account_info) -> List[Dict[str, str]]:
     deal_tp = getattr(deal, "tp", None)
     deal_profit = getattr(deal, "profit", 0.0)
     action = deal_action_label(deal_type, deal_entry)
+    result = deal_result_label(deal_profit)
 
     fields = [
         {"name": "Symbol", "value": str(deal_symbol), "inline": True},
         {"name": "Action", "value": action, "inline": True},
-        {"name": "Raw", "value": f"{DEAL_TYPE_LABEL.get(deal_type, str(deal_type))} / {DEAL_ENTRY_LABEL.get(deal_entry, str(deal_entry))}", "inline": True},
+        {"name": "Result", "value": result, "inline": True},
         {"name": "Deal Ticket", "value": str(deal_ticket), "inline": True},
         {"name": "Lot", "value": to_float(deal_volume, 2), "inline": True},
         {"name": "Price", "value": to_float(deal_price, 5), "inline": True},
@@ -269,7 +270,7 @@ def tickets(items: Optional[Iterable], attr: str = "ticket") -> Set[int]:
     return {int(getattr(i, attr)) for i in items}
 
 
-def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -> None:
+def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int, sltp_update_cooldown_sec: int) -> None:
     account_info = mt5.account_info()
     if account_info is None:
         raise RuntimeError(f"Could not fetch account info. MT5 error: {mt5.last_error()}")
@@ -282,6 +283,8 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
     seen_order_snapshots = {int(o.ticket): order_snapshot(o) for o in current_orders}
     seen_position_snapshots = {int(p.ticket): position_snapshot(p) for p in current_positions}
     seen_order_cache = {int(o.ticket): order_cache(o) for o in current_orders}
+    order_last_update_alert: Dict[int, float] = {}
+    position_last_update_alert: Dict[int, float] = {}
 
     since = utc_now() - timedelta(hours=history_seed_hours)
     existing_deals = mt5.history_deals_get(since, utc_now()) or []
@@ -327,6 +330,7 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
         order_tickets = set(order_map.keys())
         position_tickets = set(position_map.keys())
         deal_tickets = set(deal_map.keys())
+        now_ts = time.time()
 
         created_orders = order_tickets - seen_order_tickets
         removed_orders = seen_order_tickets - order_tickets
@@ -353,6 +357,11 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
             updates = changed_keys(previous_snapshot, current_snapshot)
             if not updates:
                 continue
+            only_sltp_update = set(updates).issubset({"sl", "tp"})
+            if only_sltp_update:
+                last_alert_at = order_last_update_alert.get(ticket, 0.0)
+                if now_ts - last_alert_at < sltp_update_cooldown_sec:
+                    continue
             fields = [
                 {"name": "Updated", "value": humanize_change_keys(updates), "inline": False},
             ]
@@ -364,6 +373,8 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
                 fields,
                 0x9B59B6,
             )
+            if only_sltp_update:
+                order_last_update_alert[ticket] = now_ts
 
         for ticket in sorted(removed_orders):
             cached_order = seen_order_cache.get(ticket)
@@ -402,6 +413,9 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
             updates = changed_keys(previous_snapshot, current_snapshot)
             if not updates:
                 continue
+            last_alert_at = position_last_update_alert.get(ticket, 0.0)
+            if now_ts - last_alert_at < sltp_update_cooldown_sec:
+                continue
             fields = [
                 {"name": "Updated", "value": humanize_change_keys(updates), "inline": False},
             ]
@@ -413,6 +427,7 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
                 fields,
                 0xE67E22,
             )
+            position_last_update_alert[ticket] = now_ts
 
         for ticket in sorted(fresh_deals):
             deal = deal_map[ticket]
@@ -429,6 +444,8 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
         seen_order_snapshots = {int(o.ticket): order_snapshot(o) for o in orders}
         seen_position_snapshots = {int(p.ticket): position_snapshot(p) for p in positions}
         seen_order_cache = {int(o.ticket): order_cache(o) for o in orders}
+        order_last_update_alert = {k: v for k, v in order_last_update_alert.items() if k in order_tickets}
+        position_last_update_alert = {k: v for k, v in position_last_update_alert.items() if k in position_tickets}
         seen_deal_tickets.update(fresh_deals)
         time.sleep(interval_sec)
 
@@ -443,6 +460,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=int(env("HISTORY_SEED_HOURS", "24")),
         help="Initial history scan window to avoid duplicate old deals.",
+    )
+    parser.add_argument(
+        "--sltp-update-cooldown",
+        type=int,
+        default=int(env("SLTP_UPDATE_COOLDOWN_SEC", "15")),
+        help="Minimum seconds between repeated SL/TP update alerts for the same ticket.",
     )
     return parser.parse_args()
 
@@ -470,7 +493,7 @@ def main() -> int:
         return 1
 
     try:
-        monitor_loop(webhook_url, args.interval, args.history_seed_hours)
+        monitor_loop(webhook_url, args.interval, args.history_seed_hours, args.sltp_update_cooldown)
     except KeyboardInterrupt:
         print("\n[INFO] Stopped by user.")
     except Exception as exc:
