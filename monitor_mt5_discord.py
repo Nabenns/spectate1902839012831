@@ -108,6 +108,23 @@ def build_simple_message(
     )
 
 
+def build_update_message(
+    headline: str,
+    sl: Optional[float],
+    tp: Optional[float],
+    sl_edited: bool = False,
+    tp_edited: bool = False,
+) -> str:
+    sl_suffix = " (edited)" if sl_edited else ""
+    tp_suffix = " (edited)" if tp_edited else ""
+    return (
+        f"{headline}\n"
+        f"\n"
+        f"SL : {to_float(sl)}{sl_suffix}\n"
+        f"TP : {to_float(tp)}{tp_suffix}"
+    )
+
+
 def order_message(order, type_label: str, sl_edited: bool = False, tp_edited: bool = False) -> str:
     side = side_from_order_type(order.type)
     mode = mode_from_order_type(order.type)
@@ -115,6 +132,19 @@ def order_message(order, type_label: str, sl_edited: bool = False, tp_edited: bo
     return build_simple_message(
         headline=headline,
         price=getattr(order, "price_open", 0.0),
+        sl=getattr(order, "sl", 0.0),
+        tp=getattr(order, "tp", 0.0),
+        sl_edited=sl_edited,
+        tp_edited=tp_edited,
+    )
+
+
+def order_update_message(order, sl_edited: bool = False, tp_edited: bool = False) -> str:
+    side = side_from_order_type(order.type)
+    mode = mode_from_order_type(order.type)
+    headline = f"📈 {side} {mode} - {order.symbol}"
+    return build_update_message(
+        headline=headline,
         sl=getattr(order, "sl", 0.0),
         tp=getattr(order, "tp", 0.0),
         sl_edited=sl_edited,
@@ -140,6 +170,18 @@ def position_message(position, type_label: str, sl_edited: bool = False, tp_edit
     return build_simple_message(
         headline=headline,
         price=getattr(position, "price_current", getattr(position, "price_open", 0.0)),
+        sl=getattr(position, "sl", 0.0),
+        tp=getattr(position, "tp", 0.0),
+        sl_edited=sl_edited,
+        tp_edited=tp_edited,
+    )
+
+
+def position_update_message(position, sl_edited: bool = False, tp_edited: bool = False) -> str:
+    side = "BUY" if position.type == mt5.POSITION_TYPE_BUY else "SELL"
+    headline = f"📈 {side} NOW - {position.symbol}"
+    return build_update_message(
+        headline=headline,
         sl=getattr(position, "sl", 0.0),
         tp=getattr(position, "tp", 0.0),
         sl_edited=sl_edited,
@@ -387,7 +429,7 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
             await upsert_single_reply(
                 channel,
                 "Pending Order Updated",
-                order_message(order, "LIMIT", sl_edited=flags["sl"], tp_edited=flags["tp"]),
+                order_update_message(order, sl_edited=flags["sl"], tp_edited=flags["tp"]),
                 root_message_by_key,
                 update_message_by_key,
                 key,
@@ -404,6 +446,11 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
                     "sl": float(cached_order.get("sl", 0.0) or 0.0),
                     "tp": float(cached_order.get("tp", 0.0) or 0.0),
                 }
+                # Skip extra "filled/closed" message; the deal OPENED event is the source of truth.
+                root_message_by_key.pop(key, None)
+                update_message_by_key.pop(key, None)
+                edited_flags_by_key.pop(key, None)
+                continue
             title = "Pending Order Filled/Closed" if is_filled else "Pending Order Canceled"
             content = order_message_from_cache(cached_order, "LIMIT") if is_filled else canceled_limit_message_from_cache(cached_order)
             await send_message(
@@ -436,7 +483,7 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
             await upsert_single_reply(
                 channel,
                 "Position Protection Updated",
-                position_message(position, "NOW", sl_edited=flags["sl"], tp_edited=flags["tp"]),
+                position_update_message(position, sl_edited=flags["sl"], tp_edited=flags["tp"]),
                 root_message_by_key,
                 update_message_by_key,
                 key,
