@@ -59,7 +59,7 @@ def type_emoji(type_label: str) -> str:
         return "🕒"
     if type_label.upper() == "NOW":
         return "📈"
-    return "ℹ️"
+    return ""
 
 
 def deal_action_label(deal_type, deal_entry) -> str:
@@ -89,12 +89,13 @@ def build_simple_message(
     sl_edited: bool = False,
     tp_edited: bool = False,
 ) -> str:
-    sl_suffix = " (edited ✏️)" if sl_edited else ""
-    tp_suffix = " (edited ✏️)" if tp_edited else ""
+    sl_suffix = " (edited)" if sl_edited else ""
+    tp_suffix = " (edited)" if tp_edited else ""
     t_emoji = type_emoji(type_label)
+    type_prefix = f"{t_emoji} " if t_emoji else ""
     return (
         f"{headline}\n"
-        f"{t_emoji} TYPE : {type_label}\n\n"
+        f"{type_prefix}TYPE : {type_label}\n\n"
         f"PRICE : {to_float(price)}\n"
         f"❌ SL : {to_float(sl)}{sl_suffix}\n"
         f"✅ TP : {to_float(tp)}{tp_suffix}"
@@ -145,7 +146,11 @@ def deal_message(deal) -> str:
     symbol = str(getattr(deal, "symbol", "-"))
     action = deal_action_label(getattr(deal, "type", -1), getattr(deal, "entry", -1))
     if action.startswith("CLOSED"):
-        headline = f"❌ {action} - {symbol}"
+        return (
+            f"❌ {action} - {symbol}\n"
+            f"📈 TYPE : NOW\n\n"
+            f"PRICE : {to_float(getattr(deal, 'price', 0.0))}"
+        )
     else:
         headline = f"{action} - {symbol}"
     return build_simple_message(
@@ -154,6 +159,17 @@ def deal_message(deal) -> str:
         price=getattr(deal, "price", 0.0),
         sl=getattr(deal, "sl", 0.0),
         tp=getattr(deal, "tp", 0.0),
+    )
+
+
+def canceled_limit_message_from_cache(cached_order: Dict[str, object]) -> str:
+    symbol = str(cached_order.get("symbol", "-"))
+    return (
+        f"CANCEL LIMIT - {symbol}\n"
+        f"🕒 TYPE : LIMIT\n\n"
+        f"PRICE : {to_float(float(cached_order.get('price_open', 0.0) or 0.0))}\n"
+        f"❌ SL : {to_float(float(cached_order.get('sl', 0.0) or 0.0))}\n"
+        f"✅ TP : {to_float(float(cached_order.get('tp', 0.0) or 0.0))}"
     )
 
 
@@ -306,9 +322,9 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
     update_message_by_key: Dict[str, int] = {}
     edited_flags_by_key: Dict[str, Dict[str, bool]] = {}
 
-    await send_message(channel, "MT5 Monitor Online", "🟢 MONITOR ONLINE", root_message_by_key)
+    await send_message(channel, "MT5 Monitor Online", "MONITOR ONLINE", root_message_by_key)
     if terminal_info is not None and not terminal_info.trade_allowed:
-        await send_message(channel, "MT5 AutoTrading Check", "🟠 AUTOTRADING CHECK: OFF", root_message_by_key)
+        await send_message(channel, "MT5 AutoTrading Check", "AUTOTRADING CHECK: OFF", root_message_by_key)
 
     print("[INFO] Monitor is running. Press Ctrl+C to stop.")
     while True:
@@ -375,11 +391,13 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
             if not cached_order:
                 continue
             key = f"order:{ticket}"
-            title = "Pending Order Filled/Closed" if ticket in deal_order_tickets else "Pending Order Canceled"
+            is_filled = ticket in deal_order_tickets
+            title = "Pending Order Filled/Closed" if is_filled else "Pending Order Canceled"
+            content = order_message_from_cache(cached_order, "LIMIT") if is_filled else canceled_limit_message_from_cache(cached_order)
             await send_message(
                 channel,
                 title,
-                order_message_from_cache(cached_order, "LIMIT"),
+                content,
                 root_message_by_key,
                 key=key,
                 reply=True,
