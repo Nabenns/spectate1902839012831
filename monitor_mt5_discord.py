@@ -4,7 +4,7 @@ import asyncio
 import os
 import sys
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import MetaTrader5 as mt5
 import discord
@@ -80,6 +80,18 @@ def deal_action_label(deal_type, deal_entry) -> str:
     return "OTHER"
 
 
+def deal_exit_label_and_emoji(deal) -> Tuple[str, str]:
+    reason = getattr(deal, "reason", None)
+    deal_reason_sl = getattr(mt5, "DEAL_REASON_SL", None)
+    deal_reason_tp = getattr(mt5, "DEAL_REASON_TP", None)
+
+    if deal_reason_sl is not None and reason == deal_reason_sl:
+        return "STOP LOSS", "❌"
+    if deal_reason_tp is not None and reason == deal_reason_tp:
+        return "TP", "✅"
+    return "CLOSE POSISI", "📉"
+
+
 def build_simple_message(
     headline: str,
     type_label: str,
@@ -146,8 +158,9 @@ def deal_message(deal) -> str:
     symbol = str(getattr(deal, "symbol", "-"))
     action = deal_action_label(getattr(deal, "type", -1), getattr(deal, "entry", -1))
     if action.startswith("CLOSED"):
+        exit_label, exit_emoji = deal_exit_label_and_emoji(deal)
         return (
-            f"❌ {action} - {symbol}\n"
+            f"{exit_emoji} {exit_label} - {symbol}\n"
             f"📈 TYPE : NOW\n\n"
             f"PRICE : {to_float(getattr(deal, 'price', 0.0))}"
         )
