@@ -119,6 +119,16 @@ def build_simple_message(side: str, symbol: str, type_label: str, price: Optiona
     )
 
 
+def build_action_message(action: str, symbol: str, type_label: str, price: Optional[float], sl: Optional[float], tp: Optional[float]) -> str:
+    return (
+        f"{action} - {symbol}\n"
+        f"TYPE : {type_label}\n\n"
+        f"PRICE : {line_value(price)}\n"
+        f"SL : {line_value(sl)}\n"
+        f"TP : {line_value(tp)}"
+    )
+
+
 def order_message(order, type_label: str, sl_edited: bool = False, tp_edited: bool = False) -> str:
     order_type = ORDER_TYPE_LABEL.get(order.type, str(order.type))
     side = "BUY" if "BUY" in order_type else "SELL"
@@ -169,9 +179,8 @@ def deal_message(deal) -> str:
     deal_sl = getattr(deal, "sl", None)
     deal_tp = getattr(deal, "tp", None)
     action = deal_action_label(deal_type, deal_entry)
-    side = "BUY" if "BUY" in action else "SELL"
-    return build_simple_message(
-        side=side,
+    return build_action_message(
+        action=action.upper(),
         symbol=str(deal_symbol),
         type_label="NOW",
         price=deal_price,
