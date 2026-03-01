@@ -54,14 +54,6 @@ def side_from_order_type(order_type_value) -> str:
     return "BUY" if "BUY" in order_type else "SELL"
 
 
-def type_emoji(type_label: str) -> str:
-    if type_label.upper() == "LIMIT":
-        return "🕒"
-    if type_label.upper() == "NOW":
-        return "📈"
-    return ""
-
-
 def deal_action_label(deal_type, deal_entry) -> str:
     if deal_entry == mt5.DEAL_ENTRY_IN:
         if deal_type == mt5.DEAL_TYPE_BUY:
@@ -89,12 +81,11 @@ def deal_exit_label_and_emoji(deal) -> Tuple[str, str]:
         return "STOPLOSS", "❌"
     if deal_reason_tp is not None and reason == deal_reason_tp:
         return "TAKE PROFIT", "✅"
-    return "CLOSE POSISI", "❌"
+    return "CLOSE ORDER/POSISI", "❌"
 
 
 def build_simple_message(
     headline: str,
-    type_label: str,
     price: Optional[float],
     sl: Optional[float],
     tp: Optional[float],
@@ -103,23 +94,20 @@ def build_simple_message(
 ) -> str:
     sl_suffix = " (edited)" if sl_edited else ""
     tp_suffix = " (edited)" if tp_edited else ""
-    t_emoji = type_emoji(type_label)
-    type_prefix = f"{t_emoji} " if t_emoji else ""
     return (
         f"{headline}\n"
-        f"{type_prefix}TYPE : {type_label}\n\n"
+        f"\n"
         f"PRICE : {to_float(price)}\n"
-        f"❌ SL : {to_float(sl)}{sl_suffix}\n"
-        f"✅ TP : {to_float(tp)}{tp_suffix}"
+        f"SL : {to_float(sl)}{sl_suffix}\n"
+        f"TP : {to_float(tp)}{tp_suffix}"
     )
 
 
 def order_message(order, type_label: str, sl_edited: bool = False, tp_edited: bool = False) -> str:
     side = side_from_order_type(order.type)
-    headline = f"{side} - {order.symbol}"
+    headline = f"📈 {side} NOW/LIMIT - {order.symbol}"
     return build_simple_message(
         headline=headline,
-        type_label=type_label,
         price=getattr(order, "price_open", 0.0),
         sl=getattr(order, "sl", 0.0),
         tp=getattr(order, "tp", 0.0),
@@ -130,10 +118,9 @@ def order_message(order, type_label: str, sl_edited: bool = False, tp_edited: bo
 
 def order_message_from_cache(cached_order: Dict[str, object], type_label: str) -> str:
     side = side_from_order_type(cached_order.get("type"))
-    headline = f"{side} - {cached_order.get('symbol', '-')}"
+    headline = f"📈 {side} NOW/LIMIT - {cached_order.get('symbol', '-')}"
     return build_simple_message(
         headline=headline,
-        type_label=type_label,
         price=float(cached_order.get("price_open", 0.0) or 0.0),
         sl=float(cached_order.get("sl", 0.0) or 0.0),
         tp=float(cached_order.get("tp", 0.0) or 0.0),
@@ -142,10 +129,9 @@ def order_message_from_cache(cached_order: Dict[str, object], type_label: str) -
 
 def position_message(position, type_label: str, sl_edited: bool = False, tp_edited: bool = False) -> str:
     side = "BUY" if position.type == mt5.POSITION_TYPE_BUY else "SELL"
-    headline = f"{side} - {position.symbol}"
+    headline = f"📈 {side} NOW/LIMIT - {position.symbol}"
     return build_simple_message(
         headline=headline,
-        type_label=type_label,
         price=getattr(position, "price_current", getattr(position, "price_open", 0.0)),
         sl=getattr(position, "sl", 0.0),
         tp=getattr(position, "tp", 0.0),
@@ -156,7 +142,6 @@ def position_message(position, type_label: str, sl_edited: bool = False, tp_edit
 
 def deal_message(
     deal,
-    type_label: str = "NOW",
     fallback_sl: Optional[float] = None,
     fallback_tp: Optional[float] = None,
 ) -> str:
@@ -164,11 +149,9 @@ def deal_message(
     action = deal_action_label(getattr(deal, "type", -1), getattr(deal, "entry", -1))
     if action.startswith("CLOSED"):
         exit_label, exit_emoji = deal_exit_label_and_emoji(deal)
-        return (
-            f"{exit_emoji} {exit_label} - {symbol}\n"
-            f"\nPRICE : {to_float(getattr(deal, 'price', 0.0))}"
-        )
-    headline = f"{action} - {symbol}"
+        return f"{exit_emoji} {exit_label} - {symbol}"
+    side = "BUY" if "BUY" in action else "SELL"
+    headline = f"📈 {side} NOW/LIMIT - {symbol}"
     deal_sl = getattr(deal, "sl", 0.0)
     deal_tp = getattr(deal, "tp", 0.0)
     if deal_sl in (None, 0, 0.0) and fallback_sl not in (None, 0, 0.0):
@@ -177,7 +160,6 @@ def deal_message(
         deal_tp = fallback_tp
     return build_simple_message(
         headline=headline,
-        type_label=type_label,
         price=getattr(deal, "price", 0.0),
         sl=deal_sl,
         tp=deal_tp,
@@ -186,13 +168,7 @@ def deal_message(
 
 def canceled_limit_message_from_cache(cached_order: Dict[str, object]) -> str:
     symbol = str(cached_order.get("symbol", "-"))
-    return (
-        f"CANCEL LIMIT - {symbol}\n"
-        f"🕒 TYPE : LIMIT\n\n"
-        f"PRICE : {to_float(float(cached_order.get('price_open', 0.0) or 0.0))}\n"
-        f"❌ SL : {to_float(float(cached_order.get('sl', 0.0) or 0.0))}\n"
-        f"✅ TP : {to_float(float(cached_order.get('tp', 0.0) or 0.0))}"
-    )
+    return f"❌ CANCEL LIMIT - {symbol}"
 
 
 def order_snapshot(order) -> Dict[str, float]:
@@ -467,14 +443,11 @@ async def monitor_loop(channel: discord.abc.Messageable, interval_sec: int, hist
             is_open = action.startswith("OPENED")
             is_close = action.startswith("CLOSED")
             filled_ctx = filled_order_context.get(order_ticket, {})
-            event_type_label = "LIMIT" if (is_open and order_ticket in filled_order_context) else "NOW"
-
             msg_id = await send_message(
                 channel,
                 "New MT5 Deal",
                 deal_message(
                     deal,
-                    type_label=event_type_label,
                     fallback_sl=filled_ctx.get("sl"),
                     fallback_tp=filled_ctx.get("tp"),
                 ),
