@@ -76,28 +76,25 @@ def utc_now() -> datetime:
 
 def account_fields(account_info) -> List[Dict[str, str]]:
     return [
-        {"name": "Login", "value": str(account_info.login), "inline": True},
-        {"name": "Server", "value": str(account_info.server), "inline": True},
-        {"name": "Currency", "value": str(account_info.currency), "inline": True},
         {"name": "Balance", "value": to_float(account_info.balance, 2), "inline": True},
         {"name": "Equity", "value": to_float(account_info.equity, 2), "inline": True},
-        {"name": "Margin", "value": to_float(account_info.margin, 2), "inline": True},
         {"name": "Free Margin", "value": to_float(account_info.margin_free, 2), "inline": True},
-        {"name": "Margin Level", "value": to_float(account_info.margin_level, 2), "inline": True},
-        {"name": "Profit", "value": to_float(account_info.profit, 2), "inline": True},
+        {"name": "Floating P/L", "value": to_float(account_info.profit, 2), "inline": True},
     ]
 
 
-def post_discord(webhook_url: str, title: str, description: str, fields: List[Dict[str, str]]) -> None:
+def post_discord(webhook_url: str, title: str, description: str, fields: List[Dict[str, str]], color: int) -> None:
     payload = {
         "username": "MT5 Monitor Bot",
+        "avatar_url": "https://cdn-icons-png.flaticon.com/512/5968/5968260.png",
         "embeds": [
             {
                 "title": title,
                 "description": description,
-                "color": 3447003,
+                "color": color,
                 "timestamp": utc_now().isoformat(),
                 "fields": fields,
+                "footer": {"text": "Spectate MT5 Monitor"},
             }
         ],
     }
@@ -105,9 +102,9 @@ def post_discord(webhook_url: str, title: str, description: str, fields: List[Di
     response.raise_for_status()
 
 
-def safe_post(webhook_url: str, title: str, description: str, fields: List[Dict[str, str]]) -> None:
+def safe_post(webhook_url: str, title: str, description: str, fields: List[Dict[str, str]], color: int) -> None:
     try:
-        post_discord(webhook_url, title, description, fields)
+        post_discord(webhook_url, title, description, fields, color)
         print(f"[OK] Discord sent: {title}")
     except Exception as exc:
         print(f"[WARN] Failed to send Discord webhook: {exc}")
@@ -132,14 +129,13 @@ def init_mt5(login: Optional[int], password: Optional[str], server: Optional[str
 
 def order_fields(order, account_info) -> List[Dict[str, str]]:
     fields = [
-        {"name": "Ticket", "value": str(order.ticket), "inline": True},
-        {"name": "Type", "value": ORDER_TYPE_LABEL.get(order.type, str(order.type)), "inline": True},
         {"name": "Symbol", "value": str(order.symbol), "inline": True},
-        {"name": "Volume", "value": to_float(order.volume_initial, 2), "inline": True},
-        {"name": "Price Open", "value": to_float(order.price_open, 5), "inline": True},
+        {"name": "Type", "value": ORDER_TYPE_LABEL.get(order.type, str(order.type)), "inline": True},
+        {"name": "Ticket", "value": str(order.ticket), "inline": True},
+        {"name": "Lot", "value": to_float(order.volume_initial, 2), "inline": True},
+        {"name": "Entry Price", "value": to_float(order.price_open, 5), "inline": True},
         {"name": "SL", "value": to_float(order.sl, 5), "inline": True},
         {"name": "TP", "value": to_float(order.tp, 5), "inline": True},
-        {"name": "Comment", "value": str(order.comment or "-"), "inline": False},
     ]
     fields.extend(account_fields(account_info))
     return fields
@@ -148,16 +144,15 @@ def order_fields(order, account_info) -> List[Dict[str, str]]:
 def position_fields(position, account_info) -> List[Dict[str, str]]:
     side = "BUY" if position.type == mt5.POSITION_TYPE_BUY else "SELL"
     fields = [
-        {"name": "Ticket", "value": str(position.ticket), "inline": True},
-        {"name": "Side", "value": side, "inline": True},
         {"name": "Symbol", "value": str(position.symbol), "inline": True},
-        {"name": "Volume", "value": to_float(position.volume, 2), "inline": True},
-        {"name": "Price Open", "value": to_float(position.price_open, 5), "inline": True},
-        {"name": "Price Current", "value": to_float(position.price_current, 5), "inline": True},
+        {"name": "Side", "value": side, "inline": True},
+        {"name": "Ticket", "value": str(position.ticket), "inline": True},
+        {"name": "Lot", "value": to_float(position.volume, 2), "inline": True},
+        {"name": "Open Price", "value": to_float(position.price_open, 5), "inline": True},
+        {"name": "Current Price", "value": to_float(position.price_current, 5), "inline": True},
         {"name": "SL", "value": to_float(position.sl, 5), "inline": True},
         {"name": "TP", "value": to_float(position.tp, 5), "inline": True},
         {"name": "Profit", "value": to_float(position.profit, 2), "inline": True},
-        {"name": "Comment", "value": str(position.comment or "-"), "inline": False},
     ]
     fields.extend(account_fields(account_info))
     return fields
@@ -165,23 +160,52 @@ def position_fields(position, account_info) -> List[Dict[str, str]]:
 
 def deal_fields(deal, account_info) -> List[Dict[str, str]]:
     fields = [
-        {"name": "Deal Ticket", "value": str(deal.ticket), "inline": True},
-        {"name": "Order Ticket", "value": str(deal.order), "inline": True},
-        {"name": "Position ID", "value": str(deal.position_id), "inline": True},
+        {"name": "Symbol", "value": str(deal.symbol), "inline": True},
         {"name": "Type", "value": DEAL_TYPE_LABEL.get(deal.type, str(deal.type)), "inline": True},
         {"name": "Entry", "value": DEAL_ENTRY_LABEL.get(deal.entry, str(deal.entry)), "inline": True},
-        {"name": "Symbol", "value": str(deal.symbol), "inline": True},
-        {"name": "Volume", "value": to_float(deal.volume, 2), "inline": True},
+        {"name": "Deal Ticket", "value": str(deal.ticket), "inline": True},
+        {"name": "Lot", "value": to_float(deal.volume, 2), "inline": True},
         {"name": "Price", "value": to_float(deal.price, 5), "inline": True},
         {"name": "SL", "value": to_float(deal.sl, 5), "inline": True},
         {"name": "TP", "value": to_float(deal.tp, 5), "inline": True},
         {"name": "Profit", "value": to_float(deal.profit, 2), "inline": True},
-        {"name": "Commission", "value": to_float(deal.commission, 2), "inline": True},
-        {"name": "Swap", "value": to_float(deal.swap, 2), "inline": True},
-        {"name": "Comment", "value": str(deal.comment or "-"), "inline": False},
     ]
     fields.extend(account_fields(account_info))
     return fields
+
+
+def order_snapshot(order) -> Dict[str, float]:
+    return {
+        "price_open": float(order.price_open or 0.0),
+        "sl": float(order.sl or 0.0),
+        "tp": float(order.tp or 0.0),
+        "volume_initial": float(order.volume_initial or 0.0),
+    }
+
+
+def position_snapshot(position) -> Dict[str, float]:
+    return {
+        "sl": float(position.sl or 0.0),
+        "tp": float(position.tp or 0.0),
+    }
+
+
+def changed_keys(prev: Dict[str, float], curr: Dict[str, float], precision: int = 8) -> List[str]:
+    changed = []
+    for key in curr.keys():
+        if round(prev.get(key, 0.0), precision) != round(curr.get(key, 0.0), precision):
+            changed.append(key)
+    return changed
+
+
+def humanize_change_keys(keys: List[str]) -> str:
+    labels = {
+        "price_open": "Entry Price",
+        "sl": "SL",
+        "tp": "TP",
+        "volume_initial": "Lot",
+    }
+    return ", ".join(labels.get(k, k) for k in keys) if keys else "-"
 
 
 def tickets(items: Optional[Iterable], attr: str = "ticket") -> Set[int]:
@@ -200,6 +224,8 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
     current_positions = mt5.positions_get() or []
     seen_order_tickets = tickets(current_orders)
     seen_position_tickets = tickets(current_positions)
+    seen_order_snapshots = {int(o.ticket): order_snapshot(o) for o in current_orders}
+    seen_position_snapshots = {int(p.ticket): position_snapshot(p) for p in current_positions}
 
     since = utc_now() - timedelta(hours=history_seed_hours)
     existing_deals = mt5.history_deals_get(since, utc_now()) or []
@@ -207,20 +233,22 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
 
     safe_post(
         webhook_url,
-        "MT5 Monitor Started",
-        f"Watching account `{account_info.login}` on `{account_info.server}` every {interval_sec}s.",
+        "MT5 Monitor Online",
+        f"Monitoring running every **{interval_sec}s**.",
         account_fields(account_info),
+        0x2ECC71,
     )
     if terminal_info is not None and not terminal_info.trade_allowed:
         safe_post(
             webhook_url,
-            "MT5 Trading Not Allowed",
+            "MT5 AutoTrading Check",
             "Terminal connected, but trading/algo may be disabled. Please enable AutoTrading in MT5 terminal.",
             [
                 {"name": "Connected", "value": str(terminal_info.connected), "inline": True},
                 {"name": "Trade Allowed", "value": str(terminal_info.trade_allowed), "inline": True},
                 {"name": "Community Account", "value": str(terminal_info.community_account), "inline": True},
             ],
+            0xF39C12,
         )
 
     print("[INFO] Monitor is running. Press Ctrl+C to stop.")
@@ -247,14 +275,36 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
         created_orders = order_tickets - seen_order_tickets
         opened_positions = position_tickets - seen_position_tickets
         fresh_deals = deal_tickets - seen_deal_tickets
+        common_orders = order_tickets & seen_order_tickets
+        common_positions = position_tickets & seen_position_tickets
 
         for ticket in sorted(created_orders):
             order = order_map[ticket]
             safe_post(
                 webhook_url,
                 "New MT5 Order",
-                "A new order has been detected.",
+                "Pending/market order created.",
                 order_fields(order, account_info),
+                0x3498DB,
+            )
+
+        for ticket in sorted(common_orders):
+            order = order_map[ticket]
+            current_snapshot = order_snapshot(order)
+            previous_snapshot = seen_order_snapshots.get(ticket, {})
+            updates = changed_keys(previous_snapshot, current_snapshot)
+            if not updates:
+                continue
+            fields = [
+                {"name": "Updated", "value": humanize_change_keys(updates), "inline": False},
+            ]
+            fields.extend(order_fields(order, account_info))
+            safe_post(
+                webhook_url,
+                "Pending Order Updated",
+                "Order parameters changed.",
+                fields,
+                0x9B59B6,
             )
 
         for ticket in sorted(opened_positions):
@@ -262,8 +312,28 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
             safe_post(
                 webhook_url,
                 "New MT5 Position",
-                "A new position has been opened.",
+                "Position opened/executed.",
                 position_fields(position, account_info),
+                0x1ABC9C,
+            )
+
+        for ticket in sorted(common_positions):
+            position = position_map[ticket]
+            current_snapshot = position_snapshot(position)
+            previous_snapshot = seen_position_snapshots.get(ticket, {})
+            updates = changed_keys(previous_snapshot, current_snapshot)
+            if not updates:
+                continue
+            fields = [
+                {"name": "Updated", "value": humanize_change_keys(updates), "inline": False},
+            ]
+            fields.extend(position_fields(position, account_info))
+            safe_post(
+                webhook_url,
+                "Position Protection Updated",
+                "SL/TP on open position changed.",
+                fields,
+                0xE67E22,
             )
 
         for ticket in sorted(fresh_deals):
@@ -271,12 +341,15 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
             safe_post(
                 webhook_url,
                 "New MT5 Deal",
-                "A new deal/execution has been detected.",
+                "Execution/deal detected.",
                 deal_fields(deal, account_info),
+                0xE74C3C,
             )
 
         seen_order_tickets = order_tickets
         seen_position_tickets = position_tickets
+        seen_order_snapshots = {int(o.ticket): order_snapshot(o) for o in orders}
+        seen_position_snapshots = {int(p.ticket): position_snapshot(p) for p in positions}
         seen_deal_tickets.update(fresh_deals)
         time.sleep(interval_sec)
 
