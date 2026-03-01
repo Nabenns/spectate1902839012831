@@ -3,6 +3,7 @@
 Script ini memantau aktivitas akun MetaTrader 5 dan otomatis kirim notifikasi ke Discord webhook saat:
 - ada order baru
 - ada update order pending (harga/SL/TP/lot berubah)
+- ada pending order dicancel/terhapus
 - ada posisi baru
 - ada update SL/TP pada posisi terbuka
 - ada deal/eksekusi baru

@@ -212,6 +212,32 @@ def order_snapshot(order) -> Dict[str, float]:
     }
 
 
+def order_cache(order) -> Dict[str, object]:
+    return {
+        "ticket": int(order.ticket),
+        "symbol": str(order.symbol),
+        "type": ORDER_TYPE_LABEL.get(order.type, str(order.type)),
+        "volume_initial": float(order.volume_initial or 0.0),
+        "price_open": float(order.price_open or 0.0),
+        "sl": float(order.sl or 0.0),
+        "tp": float(order.tp or 0.0),
+    }
+
+
+def order_fields_from_cache(cached_order: Dict[str, object], account_info) -> List[Dict[str, str]]:
+    fields = [
+        {"name": "Symbol", "value": str(cached_order.get("symbol", "-")), "inline": True},
+        {"name": "Type", "value": str(cached_order.get("type", "-")), "inline": True},
+        {"name": "Ticket", "value": str(cached_order.get("ticket", "-")), "inline": True},
+        {"name": "Lot", "value": to_float(cached_order.get("volume_initial", 0.0), 2), "inline": True},
+        {"name": "Entry Price", "value": to_float(cached_order.get("price_open", 0.0), 5), "inline": True},
+        {"name": "SL", "value": to_float(cached_order.get("sl", 0.0), 5), "inline": True},
+        {"name": "TP", "value": to_float(cached_order.get("tp", 0.0), 5), "inline": True},
+    ]
+    fields.extend(account_fields(account_info))
+    return fields
+
+
 def position_snapshot(position) -> Dict[str, float]:
     return {
         "sl": float(position.sl or 0.0),
@@ -255,6 +281,7 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
     seen_position_tickets = tickets(current_positions)
     seen_order_snapshots = {int(o.ticket): order_snapshot(o) for o in current_orders}
     seen_position_snapshots = {int(p.ticket): position_snapshot(p) for p in current_positions}
+    seen_order_cache = {int(o.ticket): order_cache(o) for o in current_orders}
 
     since = utc_now() - timedelta(hours=history_seed_hours)
     existing_deals = mt5.history_deals_get(since, utc_now()) or []
@@ -302,10 +329,12 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
         deal_tickets = set(deal_map.keys())
 
         created_orders = order_tickets - seen_order_tickets
+        removed_orders = seen_order_tickets - order_tickets
         opened_positions = position_tickets - seen_position_tickets
         fresh_deals = deal_tickets - seen_deal_tickets
         common_orders = order_tickets & seen_order_tickets
         common_positions = position_tickets & seen_position_tickets
+        deal_order_tickets = {int(getattr(d, "order", 0) or 0) for d in new_deals}
 
         for ticket in sorted(created_orders):
             order = order_map[ticket]
@@ -334,6 +363,26 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
                 "Order parameters changed.",
                 fields,
                 0x9B59B6,
+            )
+
+        for ticket in sorted(removed_orders):
+            cached_order = seen_order_cache.get(ticket)
+            if not cached_order:
+                continue
+            if ticket in deal_order_tickets:
+                title = "Pending Order Filled/Closed"
+                description = "Pending order no longer active and related execution was detected."
+                color = 0x16A085
+            else:
+                title = "Pending Order Canceled"
+                description = "Pending order removed from active orders (manual cancel/delete/expire)."
+                color = 0x95A5A6
+            safe_post(
+                webhook_url,
+                title,
+                description,
+                order_fields_from_cache(cached_order, account_info),
+                color,
             )
 
         for ticket in sorted(opened_positions):
@@ -379,6 +428,7 @@ def monitor_loop(webhook_url: str, interval_sec: int, history_seed_hours: int) -
         seen_position_tickets = position_tickets
         seen_order_snapshots = {int(o.ticket): order_snapshot(o) for o in orders}
         seen_position_snapshots = {int(p.ticket): position_snapshot(p) for p in positions}
+        seen_order_cache = {int(o.ticket): order_cache(o) for o in orders}
         seen_deal_tickets.update(fresh_deals)
         time.sleep(interval_sec)
 
