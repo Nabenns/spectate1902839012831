@@ -97,14 +97,12 @@ def build_simple_message(
     sl_edited: bool = False,
     tp_edited: bool = False,
 ) -> str:
-    sl_suffix = " (edited)" if sl_edited else ""
-    tp_suffix = " (edited)" if tp_edited else ""
     return (
         f"{headline}\n"
         f"\n"
         f"PRICE : {to_float(price)}\n"
-        f"SL : {to_float(sl)}{sl_suffix}\n"
-        f"TP : {to_float(tp)}{tp_suffix}"
+        f"SL : {to_float(sl)}\n"
+        f"TP : {to_float(tp)}"
     )
 
 
@@ -115,13 +113,11 @@ def build_update_message(
     sl_edited: bool = False,
     tp_edited: bool = False,
 ) -> str:
-    sl_suffix = " (edited)" if sl_edited else ""
-    tp_suffix = " (edited)" if tp_edited else ""
     return (
         f"{headline}\n"
         f"\n"
-        f"SL : {to_float(sl)}{sl_suffix}\n"
-        f"TP : {to_float(tp)}{tp_suffix}"
+        f"SL : {to_float(sl)}\n"
+        f"TP : {to_float(tp)}"
     )
 
 
